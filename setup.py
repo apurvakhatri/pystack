@@ -21,13 +21,14 @@ print("Inside setup.py")
 
 try:
     print("Inside try")
-    packages = pkgconfig.list_all()
-    for pck in packages:
-        print(pck)
-    exists_state = pkgconfig.exists('libelf')
-    print(exists_state)
     elfCFLAGS = pkgconfig.cflags('libelf')
-    print("CLAGS: " + elfCFLAGS)
+    print("elfCFLAGS: " + elfCFLAGS)
+    dwCFLAGS = pkgconfig.cflags('libdw')
+    print("dwCFLAGS: " + dwCFLAGS)
+    elfLDLAGS = pkgconfig.libs('libelf')
+    print("elfLDLAGS: " + elfLDLAGS)
+    dwLDLAGS = pkgconfig.libs('libdw')
+    print("dwLDLAGS: " + dwLDLAGS)
 except EnvironmentError as e:
     print("Inside exception")
     print("Environment error occured: ", e)
