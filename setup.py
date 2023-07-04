@@ -3,7 +3,7 @@ import pathlib
 import sys
 import pkgconfig
 import logging
-import subprocess
+#import subprocess
 
 from distutils.core import setup
 
@@ -20,10 +20,10 @@ logging.info("Starting package installation...")
 print("Inside setup.py")
 
 # Define a list of apt packages to install
-apt_packages = ['pkg-config']
+# apt_packages = ['pkg-config']
 
 # Install apt packages using apt-get command
-subprocess.check_call(['apt-get', 'install', '-y'] + apt_packages)
+# subprocess.check_call(['apt-get', 'install', '-y'] + apt_packages)
 
 try:
     print("Inside try")
