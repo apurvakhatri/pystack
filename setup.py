@@ -19,16 +19,11 @@ logging.info("Starting package installation...")
 
 print("Inside setup.py")
 
-# Define a list of apt packages to install
-# apt_packages = ['pkg-config']
-
-# Install apt packages using apt-get command
-# subprocess.check_call(['apt-get', 'install', '-y'] + apt_packages)
 
 try:
     print("Inside try")
-    packages = pkgconfig.list_all()
-    print("Packages are: " + packages)
+    packages_all = pkgconfig.list_all()
+    print("Packages are: " + packages_all)
     elfCFLAGS = pkgconfig.cflags('libelf')
     print("CLAGS: " + elfCFLAGS)
 except EnvironmentError as e:
