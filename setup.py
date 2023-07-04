@@ -2,10 +2,18 @@ import os
 import pathlib
 import sys
 import pkgconfig
+import logging
 from distutils.core import setup
 
 from Cython.Build import cythonize
 from setuptools import Extension
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+
+# Use logging instead of print
+logging.info("Starting package installation...")
+
 
 print("Inside setup.py")
 
