@@ -7,8 +7,13 @@ from distutils.core import setup
 from Cython.Build import cythonize
 from setuptools import Extension
 
-elfCFLAGS = pkgconfig.cflags('libelf')
-print(elfCFLAGS)
+try:
+    elfCFLAGS = pkgconfig.cflags('libelf')
+    print(elfCFLAGS)
+except EnvironmentError as e:
+    print("Environment error occured: ", e)
+    
+
 
 install_requires = []
 
