@@ -11,6 +11,7 @@ try:
     elfCFLAGS = pkgconfig.cflags('libelf')
     print(elfCFLAGS)
 except EnvironmentError as e:
+    print("Inside exception")
     print("Environment error occured: ", e)
     
 
