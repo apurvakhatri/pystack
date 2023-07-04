@@ -22,8 +22,8 @@ print("Inside setup.py")
 
 try:
     print("Inside try")
-    # packages_all = pkgconfig.list_all()
-    # print("Packages are: " + packages_all)
+    packages = pkgconfig.list_all()
+    print(packages)
     elfCFLAGS = pkgconfig.cflags('libelf')
     print("CLAGS: " + elfCFLAGS)
 except EnvironmentError as e:
