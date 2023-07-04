@@ -28,8 +28,7 @@ print("Inside setup.py")
 try:
     print("Inside try")
     elfCFLAGS = pkgconfig.cflags('libelf')
-    logging.info("CFLAGS are: ")
-    logging.info(elfCFLAGS)
+    print("CLAGS: " + elfCFLAGS)
 except EnvironmentError as e:
     print("Inside exception")
     print("Environment error occured: ", e)
