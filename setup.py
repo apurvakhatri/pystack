@@ -3,6 +3,8 @@ import pathlib
 import sys
 import pkgconfig
 import logging
+import subprocess
+
 from distutils.core import setup
 
 from Cython.Build import cythonize
@@ -16,6 +18,12 @@ logging.info("Starting package installation...")
 
 
 print("Inside setup.py")
+
+# Define a list of apt packages to install
+apt_packages = ['pkg-config']
+
+# Install apt packages using apt-get command
+subprocess.check_call(['apt-get', 'install', '-y'] + apt_packages)
 
 try:
     print("Inside try")
