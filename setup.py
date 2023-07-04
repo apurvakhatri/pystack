@@ -13,6 +13,7 @@ try:
 except EnvironmentError as e:
     print("Inside exception")
     print("Environment error occured: ", e)
+    sys.stdout.flush()
     
 
 
