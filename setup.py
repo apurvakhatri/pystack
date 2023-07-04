@@ -3,7 +3,6 @@ import pathlib
 import sys
 import pkgconfig
 import logging
-#import subprocess
 
 from distutils.core import setup
 
@@ -25,7 +24,8 @@ try:
     packages = pkgconfig.list_all()
     for pck in packages:
         print(pck)
-    print("Libelf exists: " + pkgconfig.exists('libelf'))
+    exists_state = pkgconfig.exists('libelf')
+    print(exists_state)
     elfCFLAGS = pkgconfig.cflags('libelf')
     print("CLAGS: " + elfCFLAGS)
 except EnvironmentError as e:
