@@ -25,6 +25,7 @@ try:
     packages = pkgconfig.list_all()
     for pck in packages:
         print(pck)
+    print("Libelf exists: " + pkgconfig.exists('libelf'))
     elfCFLAGS = pkgconfig.cflags('libelf')
     print("CLAGS: " + elfCFLAGS)
 except EnvironmentError as e:
