@@ -7,7 +7,10 @@ from distutils.core import setup
 from Cython.Build import cythonize
 from setuptools import Extension
 
+print("Inside setup.py")
+
 try:
+    print("Inside try")
     elfCFLAGS = pkgconfig.cflags('libelf')
     print(elfCFLAGS)
 except EnvironmentError as e:
