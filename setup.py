@@ -1,10 +1,14 @@
 import os
 import pathlib
 import sys
+import pkgconfig
 from distutils.core import setup
 
 from Cython.Build import cythonize
 from setuptools import Extension
+
+elfCFLAGS = pkgconfig.cflags('libelf')
+print(elfCFLAGS)
 
 install_requires = []
 
