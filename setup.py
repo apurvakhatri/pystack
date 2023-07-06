@@ -105,6 +105,14 @@ PYSTACK_EXTENSION = Extension(
 
 PYSTACK_EXTENSION.libraries.extend(["dl", "stdc++fs"])
 
+PYSTACK_EXTENSION.extra_compile_args.extend(elfCFLAGS)
+PYSTACK_EXTENSION.extra_compile_args.extend(dwCFLAGS)
+print(PYSTACK_EXTENSION.extra_compile_args)
+
+PYSTACK_EXTENSION.extra_link_args.extend(elfLDLAGS)
+PYSTACK_EXTENSION.extra_link_args.extend(dwLDLAGS)
+print(PYSTACK_EXTENSION.extra_link_args)
+
 
 about = {}
 with open("src/pystack/_version.py") as fp:
