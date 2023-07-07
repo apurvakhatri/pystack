@@ -108,10 +108,13 @@ PYSTACK_EXTENSION = Extension(
 PYSTACK_EXTENSION.libraries.extend(["dl", "stdc++fs"])
 
 for flag in clags.split():
-    PYSTACK_EXTENSION.extra_compile_args.append(flag)
+    if flag not in PYSTACK_EXTENSION.extra_compile_args:
+        PYSTACK_EXTENSION.extra_compile_args.append(flag)
 
 for flag in lflag.split():
-    PYSTACK_EXTENSION.extra_link_args.append(flag)
+    if flag not in PYSTACK_EXTENSION.extra_link_args:
+        PYSTACK_EXTENSION.extra_link_args.append(flag)
+
 print(PYSTACK_EXTENSION.extra_compile_args)
 print(PYSTACK_EXTENSION.extra_link_args)
 
