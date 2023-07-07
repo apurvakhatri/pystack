@@ -22,13 +22,15 @@ print("Inside setup.py")
 try:
     print("Inside try")
     elfCFLAGS = pkgconfig.cflags('libelf')
-    print("elfCFLAGS: " + elfCFLAGS)
     dwCFLAGS = pkgconfig.cflags('libdw')
-    print("dwCFLAGS: " + dwCFLAGS)
+    clags = elfCFLAGS + dwCFLAGS
+    print("CFLAGS: " + clags)
+    
     elfLDLAGS = pkgconfig.libs('libelf')
-    print("elfLDLAGS: " + elfLDLAGS)
     dwLDLAGS = pkgconfig.libs('libdw')
-    print("dwLDLAGS: " + dwLDLAGS)
+    lflag = elfLDLAGS + dwLDLAGS
+    print("LFLAGS: " + lflag)
+
 except EnvironmentError as e:
     print("Inside exception")
     print("Environment error occured: ", e)
@@ -105,14 +107,13 @@ PYSTACK_EXTENSION = Extension(
 
 PYSTACK_EXTENSION.libraries.extend(["dl", "stdc++fs"])
 
-PYSTACK_EXTENSION.extra_compile_args.extend(elfCFLAGS)
-PYSTACK_EXTENSION.extra_compile_args.extend(dwCFLAGS)
+for flag in clags.split():
+    PYSTACK_EXTENSION.extra_compile_args.append(flag)
+
+for flag in lflag.split():
+    PYSTACK_EXTENSION.extra_link_args.append(flag)
 print(PYSTACK_EXTENSION.extra_compile_args)
-
-PYSTACK_EXTENSION.extra_link_args.extend(elfLDLAGS)
-PYSTACK_EXTENSION.extra_link_args.extend(dwLDLAGS)
 print(PYSTACK_EXTENSION.extra_link_args)
-
 
 about = {}
 with open("src/pystack/_version.py") as fp:
