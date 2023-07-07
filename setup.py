@@ -23,12 +23,12 @@ try:
     print("Inside try")
     elfCFLAGS = pkgconfig.cflags('libelf')
     dwCFLAGS = pkgconfig.cflags('libdw')
-    clags = elfCFLAGS + dwCFLAGS
+    clags = elfCFLAGS + " " + dwCFLAGS
     print("CFLAGS: " + clags)
     
     elfLDLAGS = pkgconfig.libs('libelf')
     dwLDLAGS = pkgconfig.libs('libdw')
-    lflag = elfLDLAGS + dwLDLAGS
+    lflag = elfLDLAGS + " " + dwLDLAGS
     print("LFLAGS: " + lflag)
 
 except EnvironmentError as e:
