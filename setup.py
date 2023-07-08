@@ -1,13 +1,27 @@
 import os
 import pathlib
 import sys
+import pkgconfig
 from distutils.core import setup
 
 from Cython.Build import cythonize
 from setuptools import Extension
 
 install_requires = []
+extra_cflag = ""
+extra_ldflag = ""
+try:
+    elfCFLAGS = pkgconfig.cflags('libelf')
+    dwCFLAGS = pkgconfig.cflags('libdw')
+    extra_cflag = elfCFLAGS + " " + dwCFLAGS
 
+    elfLDLAGS = pkgconfig.libs('libelf')
+    dwLDLAGS = pkgconfig.libs('libdw')
+    extra_ldflag = elfLDLAGS + " " + dwLDLAGS
+
+except EnvironmentError as e:
+    print("Environment error occurred: ", e)
+    sys.stdout.flush()
 
 TEST_BUILD = False
 if "--test-build" in sys.argv:
@@ -74,6 +88,16 @@ PYSTACK_EXTENSION = Extension(
 )
 
 PYSTACK_EXTENSION.libraries.extend(["dl", "stdc++fs"])
+
+
+for flag in extra_cflag.split():
+    if flag not in PYSTACK_EXTENSION.extra_compile_args:
+        PYSTACK_EXTENSION.extra_compile_args.append(flag)
+
+for flag in extra_ldflag.split():
+    if flag not in PYSTACK_EXTENSION.extra_link_args:
+        PYSTACK_EXTENSION.extra_link_args.append(flag)
+
 
 
 about = {}
