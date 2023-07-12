@@ -1,6 +1,7 @@
 import os
 import pathlib
 import sys
+import pkgconfig
 from distutils.core import setup
 
 from Cython.Build import cythonize
@@ -48,6 +49,13 @@ if TEST_BUILD:
     }
     DEFINE_MACROS.extend([("CYTHON_TRACE", "1"), ("CYTHON_TRACE_NOGIL", "1")])
 
+try:
+    library_flags = pkgconfig.parse("libelf libdw")
+    print("Printing .parse output: ")
+    print(library_flags)
+except EnvironmentError as e:
+    print("pkg-config not found.", e)
+    print("Falling back to static flags.")
 
 PYSTACK_EXTENSION = Extension(
     name="pystack._pystack",
