@@ -52,7 +52,7 @@ if TEST_BUILD:
 try:
     library_flags = pkgconfig.parse("libelf libdw")
     print("Printing .parse output: ")
-    print(library_flags)
+    print(library_flag['libraries'])
 except EnvironmentError as e:
     print("pkg-config not found.", e)
     print("Falling back to static flags.")
