@@ -51,6 +51,7 @@ if TEST_BUILD:
 
 try:
     library_flags = pkgconfig.parse("libelf libdw")
+    print(**library_flags)
     print("Printing .parse output: ")
     for key, value in library_flag.items():
         print(f"{key}: {value}")
