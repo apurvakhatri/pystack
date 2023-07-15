@@ -55,7 +55,7 @@ try:
 except EnvironmentError as e:
     print("pkg-config not found.", e)
     print("Falling back to static flags.")
-    library_flags = ["elf", "dw"]
+    library_flags = {libraries=["elf", "dw"]}
 
 PYSTACK_EXTENSION = Extension(
     name="pystack._pystack",
