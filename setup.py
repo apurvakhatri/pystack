@@ -51,11 +51,11 @@ if TEST_BUILD:
 
 try:
     library_flags = pkgconfig.parse("libelf libdw")
-    library_flags = library_flags["libraries"]
+    library_flags = {'libraries':library_flags["libraries"]}
 except EnvironmentError as e:
     print("pkg-config not found.", e)
     print("Falling back to static flags.")
-    library_flags = {libraries=["elf", "dw"]}
+    library_flags = {'libraries':["elf", "dw"]}
 
 PYSTACK_EXTENSION = Extension(
     name="pystack._pystack",
