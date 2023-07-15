@@ -73,7 +73,7 @@ PYSTACK_EXTENSION = Extension(
         "src/pystack/_pystack/unwinder.cpp",
         "src/pystack/_pystack/version.cpp",
     ],
-    libraries=library_flags,
+    libraries=**library_flags,
     include_dirs=["src"],
     language="c++",
     extra_compile_args=["-std=c++17"],
