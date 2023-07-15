@@ -56,11 +56,6 @@ try:
 #    for key, value in library_flag.items():
 #        print(f"{key}: {value}")
 
-my_dict = defaultdict(list)
-my_dict['libraries'] = ['dw', 'elf']
-
-print(my_dict['libraries'])  # Output: ['dw', 'elf']
-
 except EnvironmentError as e:
     print("pkg-config not found.", e)
     print("Falling back to static flags.")
