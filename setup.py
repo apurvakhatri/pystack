@@ -51,14 +51,11 @@ if TEST_BUILD:
 
 try:
     library_flags = pkgconfig.parse("libelf libdw")
-    print(library_flags["libraries"])
-#    print("Printing .parse output: ")
-#    for key, value in library_flag.items():
-#        print(f"{key}: {value}")
-
+    library_flags = library_flags["libraries"]
 except EnvironmentError as e:
     print("pkg-config not found.", e)
     print("Falling back to static flags.")
+    library_flags = ["elf", "dw"]
 
 PYSTACK_EXTENSION = Extension(
     name="pystack._pystack",
@@ -76,7 +73,7 @@ PYSTACK_EXTENSION = Extension(
         "src/pystack/_pystack/unwinder.cpp",
         "src/pystack/_pystack/version.cpp",
     ],
-    libraries=["elf", "dw"],
+    libraries=library_flags,
     include_dirs=["src"],
     language="c++",
     extra_compile_args=["-std=c++17"],
