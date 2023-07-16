@@ -49,10 +49,12 @@ if TEST_BUILD:
     }
     DEFINE_MACROS.extend([("CYTHON_TRACE", "1"), ("CYTHON_TRACE_NOGIL", "1")])
 
-library_flags = {'libraries':["elf", "dw"]}
+library_flags = {
+    'libraries':["elf", "dw"]
+}
 
 try:
-    library_flags = pkgconfig.parse("libelf libdw")
+    library_flags = pkgconfig.parse("libelf libdwt")
     library_flags = {'libraries':library_flags["libraries"]}
 except EnvironmentError as e:
     print("pkg-config not found.", e)
@@ -87,6 +89,7 @@ PYSTACK_EXTENSION = Extension(
 )
 
 PYSTACK_EXTENSION.libraries.extend(["dl", "stdc++fs"])
+print("Final libraries are: ", PYSTACK_EXTENSION.libraries)
 
 
 about = {}
