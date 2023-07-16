@@ -56,21 +56,12 @@ library_flags = {
 try:
     library_flags = pkgconfig.parse("libelf libdwt")
     library_flags = {'libraries':library_flags["libraries"]}
-except Exception as ex:
-    if(ex.__class__.__name__ == OSError):
-        print("pkg-config not found.", e)
-    if(ex.__class__.__name__ == PackageNotFoundError):
-        print("Package Not Found", e)
-    print("Falling back to static flags.")
-    
-'''
 except EnvironmentError as e:
     print("pkg-config not found.", e)
     print("Falling back to static flags.")
 except pkgconfig.PackageNotFoundError as e:
     print("Package Not Found", e)
     print("Falling back to static flags.")
-'''    
 
 PYSTACK_EXTENSION = Extension(
     name="pystack._pystack",
