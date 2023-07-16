@@ -54,7 +54,7 @@ library_flags = {
 }
 
 try:
-    library_flags = pkgconfig.parse("libelf libdwt")
+    library_flags = pkgconfig.parse("libelf libdw")
     library_flags = {'libraries':library_flags["libraries"]}
 except EnvironmentError as e:
     print("pkg-config not found.", e)
