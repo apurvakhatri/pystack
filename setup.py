@@ -49,13 +49,18 @@ if TEST_BUILD:
     }
     DEFINE_MACROS.extend([("CYTHON_TRACE", "1"), ("CYTHON_TRACE_NOGIL", "1")])
 
+library_flags = {'libraries':["elf", "dw"]}
+
 try:
     library_flags = pkgconfig.parse("libelf libdw")
     library_flags = {'libraries':library_flags["libraries"]}
 except EnvironmentError as e:
     print("pkg-config not found.", e)
     print("Falling back to static flags.")
-    library_flags = {'libraries':["elf", "dw"]}
+except pkgconfig.PackageNotFoundError as e:
+    print("Package Not Found", e)
+    print("Falling back to static flags.")
+    
 
 PYSTACK_EXTENSION = Extension(
     name="pystack._pystack",
@@ -73,7 +78,7 @@ PYSTACK_EXTENSION = Extension(
         "src/pystack/_pystack/unwinder.cpp",
         "src/pystack/_pystack/version.cpp",
     ],
-    libraries=**library_flags,
+    libraries=library_flags['libraries'],
     include_dirs=["src"],
     language="c++",
     extra_compile_args=["-std=c++17"],
