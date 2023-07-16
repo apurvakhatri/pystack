@@ -47,7 +47,20 @@ if TEST_BUILD:
     }
     DEFINE_MACROS.extend([("CYTHON_TRACE", "1"), ("CYTHON_TRACE_NOGIL", "1")])
 
+library_flags = {
+    'libraries':["elf", "dw"]
+}
 
+try:
+    library_flags = pkgconfig.parse("libelf libdw")
+    library_flags = {'libraries':library_flags["libraries"]}
+except EnvironmentError as e:
+    print("pkg-config not found.", e)
+    print("Falling back to static flags.")
+except pkgconfig.PackageNotFoundError as e:
+    print("Package Not Found", e)
+    print("Falling back to static flags.")
+    
 PYSTACK_EXTENSION = setuptools.Extension(
     name="pystack._pystack",
     sources=[
