@@ -50,6 +50,10 @@ PyStack has the following amazing features:
 - 💼 Self-contained: it does not depend on external tools or programs other than the Python
   interpreter used to run PyStack itself.
 
+## What platforms are supported?
+
+At this time only Linux is supported.
+
 ## Building from source
 
 If you wish to build PyStack from source, you need the following binary dependencies in your
@@ -64,6 +68,8 @@ package.
 Check your package manager on how to install these dependencies (e.g.,
 `apt-get install libdw-dev libelf-dev` in Debian-based systems). Note that you may need to tell the
 compiler where to find the header and library files of the dependencies for the build to succeed.
+If `pkg-config` is available (e.g. `apt-get install pkg-config` on Debian-based systems), it will
+automatically be used to locate the libraries and configure the correct build flags.
 Check your distribution's documentation to determine the location of the header and library files
 or for more detailed information. When building on Alpine Linux (or any other distribution that
 doesn't use glibc) you'll need elfutils 0.188 or newer. You may need to build this from source if

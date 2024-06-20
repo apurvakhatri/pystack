@@ -162,7 +162,18 @@ LongObject::LongObject(
 
     _PyLongObject longobj;
     manager->copyObjectFromProcess(addr, &longobj);
-    ssize_t size = longobj.ob_base.ob_size;
+    ssize_t size;
+    bool negative;
+
+    if (manager->versionIsAtLeast(3, 12)) {
+        auto lv_tag = *reinterpret_cast<uintptr_t*>(&longobj.ob_base.ob_size);
+        negative = (lv_tag & 3) == 2;
+        size = lv_tag >> 3;
+    } else {
+        negative = longobj.ob_base.ob_size < 0;
+        size = std::abs(longobj.ob_base.ob_size);
+    }
+
     if (size == 0) {
         d_value = 0;
         return;
@@ -186,12 +197,12 @@ LongObject::LongObject(
      */
 
     std::vector<digit> digits;
-    digits.resize(std::abs(size));
+    digits.resize(size);
     manager->copyMemoryFromProcess(
             addr + offsetof(_PyLongObject, ob_digit),
-            sizeof(digit) * std::abs(size),
+            sizeof(digit) * size,
             digits.data());
-    for (ssize_t i = 0; i < std::abs(size); ++i) {
+    for (ssize_t i = 0; i < size; ++i) {
         long long factor;
         if (__builtin_mul_overflow(digits[i], (1Lu << (ssize_t)(shift * i)), &factor)) {
             d_overflowed = true;
@@ -203,7 +214,9 @@ LongObject::LongObject(
         }
     }
 
-    d_value = size < 0 ? -1 * d_value : d_value;
+    if (negative) {
+        d_value = -1 * d_value;
+    }
 }
 
 std::string
@@ -241,21 +254,21 @@ getDictEntries(
         std::vector<Python3::PyDictKeyEntry>& valid_entries)
 {
     auto keys_addr = reinterpret_cast<remote_addr_t>(dict.ma_keys);
-    assert(manager->majorVersion() == 3);
+    assert(manager->versionIsAtLeast(3, 0));
     ssize_t dk_size = 0;
     int dk_kind = 0;
 
-    if (manager->minorVersion() <= 10) {
-        Python3_3::PyDictKeysObject keys;
-        manager->copyObjectFromProcess(keys_addr, &keys);
-        num_items = keys.dk_nentries;
-        dk_size = keys.dk_size;
-    } else {
+    if (manager->versionIsAtLeast(3, 11)) {
         Python3_11::PyDictKeysObject keys;
         manager->copyObjectFromProcess(keys_addr, &keys);
         num_items = keys.dk_nentries;
         dk_size = 1L << keys.dk_log2_size;
         dk_kind = keys.dk_kind;
+    } else {
+        Python3_3::PyDictKeysObject keys;
+        manager->copyObjectFromProcess(keys_addr, &keys);
+        num_items = keys.dk_nentries;
+        dk_size = keys.dk_size;
     }
     if (num_items == 0) {
         LOG(DEBUG) << std::hex << std::showbase << "There are no elements in this dict";
@@ -281,10 +294,10 @@ getDictEntries(
     }
 
     offset_t dk_indices_offset = 0;
-    if (manager->minorVersion() <= 10) {
-        dk_indices_offset = offsetof(Python3_3::PyDictKeysObject, dk_indices);
-    } else {
+    if (manager->versionIsAtLeast(3, 11)) {
         dk_indices_offset = offsetof(Python3_11::PyDictKeysObject, dk_indices);
+    } else {
+        dk_indices_offset = offsetof(Python3_3::PyDictKeysObject, dk_indices);
     }
 
     remote_addr_t entries_addr = keys_addr + dk_indices_offset + offset;
@@ -344,12 +357,10 @@ DictObject::DictObject(std::shared_ptr<const AbstractProcessManager> manager, re
     // For now, the layout that we use here only allows us to get Python3.6+ dictionaries
     // as dictionaries before that have much more variability and are much harder to get.
 
-    if (d_manager->majorVersion() > 2) {
-        if (d_manager->minorVersion() < 6) {
-            d_invalid = true;
-            return;
-        }
+    if (d_manager->versionIsAtLeast(3, 6)) {
         loadFromPython3(addr);
+    } else if (d_manager->versionIsAtLeast(3, 0)) {
+        d_invalid = true;
     } else {
         loadFromPython2(addr);
     }
@@ -516,9 +527,9 @@ Object::Object(const std::shared_ptr<const AbstractProcessManager>& manager, rem
     LOG(DEBUG) << std::hex << std::showbase << "Copying typeobject from address " << obj.ob_type;
     manager->copyMemoryFromProcess((remote_addr_t)obj.ob_type, manager->offsets().py_type.size, &cls);
 
-    d_flags = manager->versionedTypeField<unsigned long, &py_type_v::o_tp_flags>(cls);
+    d_flags = manager->getField(cls, &py_type_v::o_tp_flags);
 
-    remote_addr_t name_addr = manager->versionedTypeField<remote_addr_t, &py_type_v::o_tp_name>(cls);
+    remote_addr_t name_addr = manager->getField(cls, &py_type_v::o_tp_name);
     try {
         d_classname = manager->getCStringFromAddress(name_addr);
     } catch (RemoteMemCopyError& ex) {
@@ -618,7 +629,7 @@ Object::objectType() const
     const long subclass_flags = d_flags & subclass_mask;
 
     if (subclass_flags == Pystack_TPFLAGS_BYTES_SUBCLASS) {
-        return d_manager->majorVersion() > 2 ? ObjectType::BYTES : ObjectType::STRING;
+        return d_manager->versionIsAtLeast(3, 0) ? ObjectType::BYTES : ObjectType::STRING;
     } else if (subclass_flags == Pystack_TPFLAGS_UNICODE_SUBCLASS) {
         return ObjectType::STRING;
     } else if (subclass_flags == Pystack_TPFLAGS_INT_SUBCLASS) {
@@ -651,12 +662,10 @@ Object::toConcreteObject() const
     try {
         switch (objectType()) {
             case Object::ObjectType::STRING:
-                if (d_manager->majorVersion() < 3) {
-                    return normalizeBytesObjectRepresentation(
-                            d_manager->getStringFromAddress(d_addr),
-                            "");
+                if (d_manager->versionIsAtLeast(3, 0)) {
+                    return '"' + d_manager->getStringFromAddress(d_addr) + '"';
                 }
-                return '"' + d_manager->getStringFromAddress(d_addr) + '"';
+                return normalizeBytesObjectRepresentation(d_manager->getStringFromAddress(d_addr), "");
             case Object::ObjectType::BYTES:
                 return normalizeBytesObjectRepresentation(d_manager->getBytesFromAddress(d_addr));
             case Object::ObjectType::NONE:
@@ -689,7 +698,7 @@ Object::toConcreteObject() const
 std::string
 Object::guessClassName(PyTypeObject& type) const
 {
-    remote_addr_t tp_repr = d_manager->versionedTypeField<remote_addr_t, &py_type_v::o_tp_repr>(type);
+    remote_addr_t tp_repr = d_manager->getField(type, &py_type_v::o_tp_repr);
     if (tp_repr == d_manager->findSymbol("float_repr")) {
         return "float";
     }

@@ -31,6 +31,7 @@ _process_vm_readv(
 }
 
 static const std::string PERM_MESSAGE = "Operation not permitted";
+static const size_t CACHE_CAPACITY = 5e+7;  // 50MB
 
 VirtualMap::VirtualMap(
         uintptr_t start,
@@ -155,34 +156,130 @@ MemoryMapInformation::setHeap(const VirtualMap& heap)
     d_heap = heap;
 }
 
+LRUCache::LRUCache(size_t capacity)
+: d_cache_capacity(capacity)
+, d_size(0){};
+
+void
+LRUCache::put(uintptr_t key, std::vector<char>&& value)
+{
+    size_t value_size = value.size();
+
+    if (!can_fit(value_size)) {
+        return;
+    }
+
+    auto it = d_cache.find(key);
+
+    if (it != d_cache.end()) {
+        d_cache_list.erase(it->second.it);
+        d_cache.erase(it);
+    }
+
+    while (d_size + value_size > d_cache_capacity) {
+        d_cache.erase(d_cache_list.back().key);
+        d_size -= d_cache_list.back().size;
+        d_cache_list.pop_back();
+    }
+
+    d_cache_list.push_front(LRUCache::ListNode{key, value_size});
+    d_cache[key] = LRUCache::CacheValue{std::move(value), d_cache_list.begin()};
+    d_size += value_size;
+}
+
+const std::vector<char>&
+LRUCache::get(uintptr_t key)
+{
+    auto it = d_cache.find(key);
+    if (it == d_cache.end()) {
+        throw std::range_error("There is no such key in the cache");
+    } else {
+        auto node_it = it->second.it;
+        d_cache_list.splice(d_cache_list.begin(), d_cache_list, node_it);
+        return it->second.data;
+    }
+}
+
+bool
+LRUCache::exists(uintptr_t key)
+{
+    return (d_cache.find(key) != d_cache.end());
+}
+
+bool
+LRUCache::can_fit(size_t size)
+{
+    return d_cache_capacity >= size;
+}
+
+ProcessMemoryManager::ProcessMemoryManager(pid_t pid, const std::vector<VirtualMap>& vmaps)
+: d_pid(pid)
+, d_vmaps(vmaps)
+, d_lru_cache(CACHE_CAPACITY)
+{
+}
+
 ProcessMemoryManager::ProcessMemoryManager(pid_t pid)
-: d_pid(pid){};
+: d_pid(pid)
+, d_lru_cache(CACHE_CAPACITY)
+{
+}
 
 ssize_t
-ProcessMemoryManager::copyMemoryFromProcess(remote_addr_t addr, size_t len, void* buf) const
+ProcessMemoryManager::readChunk(remote_addr_t addr, size_t len, char* dst) const
 {
     struct iovec local[1];
     struct iovec remote[1];
+    ssize_t result = 0;
+    ssize_t read = 0;
 
-    local[0].iov_base = buf;
-    local[0].iov_len = len;
-    remote[0].iov_base = (void*)addr;
-    remote[0].iov_len = len;
+    do {
+        local[0].iov_base = dst + result;
+        local[0].iov_len = len - result;
+        remote[0].iov_base = reinterpret_cast<uint8_t*>(addr) + result;
+        remote[0].iov_len = len - result;
 
-    ssize_t result = _process_vm_readv(d_pid, local, 1, remote, 1, 0);
-    if (result < 0) {
-        if (errno == EFAULT) {
-            throw InvalidRemoteAddress();
-        } else if (errno == EPERM) {
-            throw std::runtime_error(PERM_MESSAGE);
+        read = _process_vm_readv(d_pid, local, 1, remote, 1, 0);
+        if (read < 0) {
+            if (errno == EFAULT) {
+                throw InvalidRemoteAddress();
+            } else if (errno == EPERM) {
+                throw std::runtime_error(PERM_MESSAGE);
+            }
+            throw std::system_error(errno, std::generic_category());
         }
-        throw std::system_error(errno, std::generic_category());
+
+        result += read;
+    } while ((size_t)read != local[0].iov_len);
+
+    return result;
+}
+
+ssize_t
+ProcessMemoryManager::copyMemoryFromProcess(remote_addr_t addr, size_t len, void* dst) const
+{
+    auto vmap = std::find_if(d_vmaps.begin(), d_vmaps.end(), [&](const auto& vmap) {
+        return vmap.containsAddr(addr) && vmap.containsAddr(addr + len - 1);
+    });
+
+    if (vmap == d_vmaps.end() || !d_lru_cache.can_fit(vmap->Size())) {
+        return readChunk(addr, len, reinterpret_cast<char*>(dst));
     }
 
-    if ((size_t)result != len) {
-        throw InvalidCopiedMemory();
+    uintptr_t key = vmap->Start();
+    size_t chunk_size = vmap->Size();
+    remote_addr_t vmap_start_addr = vmap->Start();
+    size_t offset_addr = addr - vmap_start_addr;
+
+    if (!d_lru_cache.exists(key)) {
+        std::vector<char> buf(chunk_size);
+        readChunk(vmap_start_addr, chunk_size, buf.data());
+        d_lru_cache.put(key, std::move(buf));
     }
-    return result;
+
+    std::memcpy(dst, d_lru_cache.get(key).data() + offset_addr, len);
+
+    return len;
 }
 
 bool
@@ -194,11 +291,14 @@ ProcessMemoryManager::isAddressValid(remote_addr_t addr, const VirtualMap& map) 
     return map.Start() <= addr && addr < map.End();
 }
 
-BlockingProcessMemoryManager::BlockingProcessMemoryManager(pid_t pid, const std::vector<int>& tids)
-: ProcessMemoryManager(pid)
+BlockingProcessMemoryManager::BlockingProcessMemoryManager(
+        pid_t pid,
+        const std::vector<int>& tids,
+        const std::vector<VirtualMap>& vmaps)
+: ProcessMemoryManager(pid, vmaps)
 , d_tids(tids)
 {
-    for (auto& tid : tids) {
+    for (auto& tid : d_tids) {
         LOG(INFO) << "Trying to stop thread " << tid;
         long ret = ptrace(PTRACE_ATTACH, tid, nullptr, nullptr);
         if (ret < 0) {
@@ -244,23 +344,89 @@ CorefileRemoteMemoryManager::CorefileRemoteMemoryManager(
 {
     CoreFileExtractor extractor{d_analyzer};
     d_shared_libs = extractor.ModuleInformation();
+
+    const char* filename = d_analyzer->d_filename.c_str();
+    int fd = open(filename, O_RDONLY);
+
+    if (fd == -1) {
+        LOG(ERROR) << "Failed to open a file " << filename;
+        throw RemoteMemCopyError();
+    }
+
+    StatusCode ret = readCorefile(fd, filename);
+    int close_ret = close(fd);
+
+    if (close_ret == -1) {
+        LOG(ERROR) << "Failed to close a file " << filename;
+        throw RemoteMemCopyError();
+    }
+
+    if (ret == StatusCode::ERROR) {
+        throw RemoteMemCopyError();
+    }
+}
+
+CorefileRemoteMemoryManager::StatusCode
+CorefileRemoteMemoryManager::readCorefile(int fd, const char* filename) noexcept
+{
+    struct stat fileInfo = {0};
+
+    if (fstat(fd, &fileInfo) == -1) {
+        LOG(ERROR) << "Failed to get a file size for a file " << filename;
+        return StatusCode::ERROR;
+    }
+
+    if (fileInfo.st_size == 0) {
+        LOG(ERROR) << "File " << filename << " is empty";
+        return StatusCode::ERROR;
+    }
+
+    d_corefile_size = fileInfo.st_size;
+
+    void* map = mmap(0, d_corefile_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (map == MAP_FAILED) {
+        LOG(ERROR) << "Failed to mmap a file " << filename;
+        return StatusCode::ERROR;
+    }
+
+    d_corefile_data = std::unique_ptr<char, std::function<void(char*)>>(
+            reinterpret_cast<char*>(map),
+            [this](auto addr) {
+                if (munmap(addr, d_corefile_size) == -1) {
+                    LOG(ERROR) << "Failed to un-mmap a file " << d_analyzer->d_filename.c_str();
+                }
+            });
+
+    int madvise_result = madvise(d_corefile_data.get(), d_corefile_size, MADV_RANDOM);
+
+    if (madvise_result == -1) {
+        LOG(WARNING) << "Madvise for a file " << filename << " failed";
+    }
+
+    return StatusCode::SUCCESS;
 }
 
 ssize_t
 CorefileRemoteMemoryManager::copyMemoryFromProcess(remote_addr_t addr, size_t size, void* destination)
         const
 {
-    const std::string* filename = nullptr;
     off_t offset_in_file = 0;
 
-    StatusCode ret = getMemoryLocationFromCore(addr, &filename, &offset_in_file);
+    StatusCode ret = getMemoryLocationFromCore(addr, &offset_in_file);
 
-    if (ret == StatusCode::ERROR) {
-        // The memory may be in the data segment of some shared library
-        getMemoryLocationFromElf(addr, &filename, &offset_in_file);
+    if (ret == StatusCode::SUCCESS) {
+        if (static_cast<size_t>(offset_in_file) > d_corefile_size) {
+            throw InvalidRemoteAddress();
+        }
+        memcpy(destination, d_corefile_data.get() + offset_in_file, size);
+        return size;
     }
 
-    if (filename == nullptr) {
+    // The memory may be in the data segment of some shared library
+    const std::string* filename = nullptr;
+    ret = getMemoryLocationFromElf(addr, &filename, &offset_in_file);
+
+    if (ret == StatusCode::ERROR) {
         throw InvalidRemoteAddress();
     }
 
@@ -276,10 +442,7 @@ CorefileRemoteMemoryManager::copyMemoryFromProcess(remote_addr_t addr, size_t si
 }
 
 CorefileRemoteMemoryManager::StatusCode
-CorefileRemoteMemoryManager::getMemoryLocationFromCore(
-        remote_addr_t addr,
-        const std::string** filename,
-        off_t* offset_in_file) const
+CorefileRemoteMemoryManager::getMemoryLocationFromCore(remote_addr_t addr, off_t* offset_in_file) const
 {
     auto corefile_it = std::find_if(d_vmaps.cbegin(), d_vmaps.cend(), [&](auto& map) {
         return (map.Start() <= addr && addr <= map.End()) && (map.FileSize() != 0 && map.Offset() != 0);
@@ -287,9 +450,9 @@ CorefileRemoteMemoryManager::getMemoryLocationFromCore(
     if (corefile_it == d_vmaps.cend()) {
         return StatusCode::ERROR;
     }
+
     unsigned long base = corefile_it->Offset() - corefile_it->Start();
     *offset_in_file = base + addr;
-    *filename = &d_analyzer->d_filename;
     return StatusCode::SUCCESS;
 }
 

@@ -1,9 +1,16 @@
 import os
 import pathlib
 import sys
+from sys import platform
 
+import pkgconfig
 import setuptools
 from Cython.Build import cythonize
+
+IS_LINUX = "linux" in platform
+
+if not IS_LINUX:
+    raise RuntimeError(f"memray does not support this platform ({platform})")
 
 install_requires = []
 
@@ -24,7 +31,6 @@ COMPILER_DIRECTIVES = {
     "boundscheck": False,
     "wraparound": False,
     "cdivision": True,
-    "linetrace": True,
     "c_string_type": "unicode",
     "c_string_encoding": "utf8",
 }
@@ -47,6 +53,16 @@ if TEST_BUILD:
     }
     DEFINE_MACROS.extend([("CYTHON_TRACE", "1"), ("CYTHON_TRACE_NOGIL", "1")])
 
+library_flags = {"libraries": ["elf", "dw"]}
+
+try:
+    library_flags = pkgconfig.parse("libelf libdw")
+except EnvironmentError as e:
+    print("pkg-config not found.", e)
+    print("Falling back to static flags.")
+except pkgconfig.PackageNotFoundError as e:
+    print("Package Not Found", e)
+    print("Falling back to static flags.")
 
 PYSTACK_EXTENSION = setuptools.Extension(
     name="pystack._pystack",
@@ -64,12 +80,12 @@ PYSTACK_EXTENSION = setuptools.Extension(
         "src/pystack/_pystack/unwinder.cpp",
         "src/pystack/_pystack/version.cpp",
     ],
-    libraries=["elf", "dw"],
     include_dirs=["src"],
     language="c++",
     extra_compile_args=["-std=c++17"],
     extra_link_args=["-std=c++17"],
     define_macros=DEFINE_MACROS,
+    **library_flags,
 )
 
 PYSTACK_EXTENSION.libraries.extend(["dl", "stdc++fs"])
@@ -95,11 +111,11 @@ setuptools.setup(
         "Intended Audience :: Developers",
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: POSIX :: Linux",
-        "Operating System :: MacOS",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: Implementation :: CPython",
         "Topic :: Software Development :: Debuggers",
     ],

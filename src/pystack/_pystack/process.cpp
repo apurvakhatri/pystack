@@ -147,8 +147,7 @@ AbstractProcessManager::isValidInterpreterState(remote_addr_t addr) const
     garbage.
 
     If any of the previous steps fail, we continue with the next memory chunk
-    until we found the PyInterpreterState or we run our of chunks.
-
+    until we find the PyInterpreterState or we run out of chunks.
     */
     if (!isAddressValid(addr)) {
         return false;
@@ -166,8 +165,7 @@ AbstractProcessManager::isValidInterpreterState(remote_addr_t addr) const
     }
 
     PyThreadState current_thread;
-    auto current_thread_addr =
-            versionedInterpreterStateField<remote_addr_t, &py_is_v::o_tstate_head>(is);
+    auto current_thread_addr = getField(is, &py_is_v::o_tstate_head);
     if (!isAddressValid(current_thread_addr)) {
         return false;
     }
@@ -178,7 +176,7 @@ AbstractProcessManager::isValidInterpreterState(remote_addr_t addr) const
         return false;
     }
 
-    if (versionedThreadField<remote_addr_t, &py_thread_v::o_interp>(current_thread) != addr) {
+    if (getField(current_thread, &py_thread_v::o_interp) != addr) {
         return false;
     }
 
@@ -187,9 +185,9 @@ AbstractProcessManager::isValidInterpreterState(remote_addr_t addr) const
 
     // Validate dictionaries in the interpreter state
     std::unordered_map<std::string, remote_addr_t> dictionaries(
-            {{"modules", versionedInterpreterStateField<remote_addr_t, &py_is_v::o_modules>(is)},
-             {"sysdict", versionedInterpreterStateField<remote_addr_t, &py_is_v::o_sysdict>(is)},
-             {"builtins", versionedInterpreterStateField<remote_addr_t, &py_is_v::o_builtins>(is)}});
+            {{"modules", getField(is, &py_is_v::o_modules)},
+             {"sysdict", getField(is, &py_is_v::o_sysdict)},
+             {"builtins", getField(is, &py_is_v::o_builtins)}});
     for (const auto& [dictname, addr] : dictionaries) {
         if (!isValidDictionaryObject(addr)) {
             LOG(DEBUG) << "The '" << dictname << "' dictionary object is not valid";
@@ -227,8 +225,7 @@ AbstractProcessManager::findInterpreterStateFromPyRuntime(remote_addr_t runtime_
 
     PyRuntimeState py_runtime;
     copyObjectFromProcess(runtime_addr, &py_runtime);
-    remote_addr_t interp_state =
-            versionedRuntimeField<remote_addr_t, &py_runtime_v::o_interp_head>(py_runtime);
+    remote_addr_t interp_state = getField(py_runtime, &py_runtime_v::o_interp_head);
 
     if (!isValidInterpreterState(interp_state)) {
         LOG(INFO) << "Failing to resolve PyInterpreterState based on PyRuntime address " << std::hex
@@ -362,7 +359,14 @@ AbstractProcessManager::getStringFromAddress(remote_addr_t addr) const
         len = unicode._base._base.length;
         buffer.resize(len);
 
-        data_addr = ((remote_addr_t)((char*)addr + sizeof(PyASCIIObject)));
+        size_t offset;
+        if (d_major > 3 || (d_major == 3 && d_minor >= 12)) {
+            offset = sizeof(Python3_12::PyASCIIObject);
+        } else {
+            offset = sizeof(Python3::PyASCIIObject);
+        }
+
+        data_addr = ((remote_addr_t)((char*)addr + offset));
         LOG(DEBUG) << std::hex << std::showbase << "Copying ASCII data for unicode object from address "
                    << data_addr;
         copyMemoryFromProcess(data_addr, len, buffer.data());
@@ -470,7 +474,7 @@ AbstractProcessManager::isInterpreterActive() const
     if (runtime_addr) {
         PyRuntimeState py_runtime;
         copyObjectFromProcess(runtime_addr, &py_runtime);
-        remote_addr_t p = versionedRuntimeField<remote_addr_t, &py_runtime_v::o_finalizing>(py_runtime);
+        remote_addr_t p = getField(py_runtime, &py_runtime_v::o_finalizing);
         return p == 0 ? InterpreterStatus::RUNNING : InterpreterStatus::FINALIZED;
     }
 
@@ -502,16 +506,10 @@ AbstractProcessManager::setPythonVersion(const std::pair<int, int>& version)
     d_minor = version.second;
 }
 
-int
-AbstractProcessManager::majorVersion() const
+bool
+AbstractProcessManager::versionIsAtLeast(int required_major, int required_minor) const
 {
-    return d_major;
-}
-
-int
-AbstractProcessManager::minorVersion() const
-{
-    return d_minor;
+    return d_major > required_major || (d_major == required_major && d_minor >= required_minor);
 }
 
 const python_v&
@@ -549,9 +547,9 @@ ProcessManager::ProcessManager(
 , d_tids(getProcessTids(pid))
 {
     if (blocking) {
-        d_manager = std::make_unique<BlockingProcessMemoryManager>(pid, d_tids);
+        d_manager = std::make_unique<BlockingProcessMemoryManager>(pid, d_tids, d_memory_maps);
     } else {
-        d_manager = std::make_unique<ProcessMemoryManager>(pid);
+        d_manager = std::make_unique<ProcessMemoryManager>(pid, d_memory_maps);
     }
     d_analyzer = analyzer;
     d_unwinder = std::make_unique<Unwinder>(analyzer);

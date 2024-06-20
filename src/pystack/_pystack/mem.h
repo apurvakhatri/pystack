@@ -1,10 +1,15 @@
 #pragma once
 
 #include <cstdint>
+#include <fcntl.h>
+#include <functional>
+#include <list>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <vector>
 
 #include <elf_common.h>
@@ -109,6 +114,36 @@ class MemoryMapInformation
     std::optional<VirtualMap> d_heap;
 };
 
+class LRUCache
+{
+  private:
+    struct ListNode
+    {
+        uintptr_t key;
+        size_t size;
+    };
+
+    struct CacheValue
+    {
+        std::vector<char> data;
+        std::list<ListNode>::iterator it;
+    };
+
+  public:
+    explicit LRUCache(size_t cache_capacity);
+
+    void put(uintptr_t key, std::vector<char>&& value);
+    const std::vector<char>& get(uintptr_t key);
+    bool exists(uintptr_t key);
+    bool can_fit(size_t size);
+
+  private:
+    std::list<ListNode> d_cache_list;
+    std::unordered_map<uintptr_t, CacheValue> d_cache;
+    size_t d_cache_capacity;
+    size_t d_size;
+};
+
 class AbstractRemoteMemoryManager
 {
   public:
@@ -120,7 +155,6 @@ class AbstractRemoteMemoryManager
 
     // Methods
     virtual ssize_t copyMemoryFromProcess(remote_addr_t addr, size_t size, void* destination) const = 0;
-
     virtual bool isAddressValid(remote_addr_t addr, const VirtualMap& map) const = 0;
 };
 
@@ -129,21 +163,30 @@ class ProcessMemoryManager : public AbstractRemoteMemoryManager
     // Constructors
   public:
     explicit ProcessMemoryManager(pid_t pid);
+    explicit ProcessMemoryManager(pid_t pid, const std::vector<VirtualMap>& vmaps);
 
     // Methods
-    ssize_t copyMemoryFromProcess(remote_addr_t addr, size_t size, void* destination) const override;
+    ssize_t copyMemoryFromProcess(remote_addr_t addr, size_t size, void* dst) const override;
     bool isAddressValid(remote_addr_t addr, const VirtualMap& map) const override;
 
   private:
     // Data members
     pid_t d_pid;
+    std::vector<VirtualMap> d_vmaps;
+    mutable LRUCache d_lru_cache;
+
+    // Methods
+    ssize_t readChunk(remote_addr_t addr, size_t len, char* dst) const;
 };
 
 class BlockingProcessMemoryManager : public ProcessMemoryManager
 {
   public:
     // Constructors
-    explicit BlockingProcessMemoryManager(pid_t pid, const std::vector<int>& tids);
+    explicit BlockingProcessMemoryManager(
+            pid_t pid,
+            const std::vector<int>& tids,
+            const std::vector<VirtualMap>& vmaps);
 
     // Destructors
     ~BlockingProcessMemoryManager() override;
@@ -188,11 +231,11 @@ class CorefileRemoteMemoryManager : public AbstractRemoteMemoryManager
     std::shared_ptr<CoreFileAnalyzer> d_analyzer;
     std::vector<VirtualMap> d_vmaps;
     std::vector<SimpleVirtualMap> d_shared_libs;
+    size_t d_corefile_size;
+    std::unique_ptr<char, std::function<void(char*)>> d_corefile_data;
 
-    StatusCode getMemoryLocationFromCore(
-            remote_addr_t addr,
-            const std::string** filename,
-            off_t* offset_in_file) const;
+    StatusCode readCorefile(int fd, const char* filename) noexcept;
+    StatusCode getMemoryLocationFromCore(remote_addr_t addr, off_t* offset_in_file) const;
     StatusCode getMemoryLocationFromElf(
             remote_addr_t addr,
             const std::string** filename,

@@ -30,16 +30,27 @@ class FrameObject
     void resolveLocalVariables();
 
   private:
+    // Methods
+    static bool
+    getIsShim(const std::shared_ptr<const AbstractProcessManager>& manager, const PyFrameObject& frame);
+
+    static std::unique_ptr<CodeObject>
+    getCode(const std::shared_ptr<const AbstractProcessManager>& manager, const PyFrameObject& frame);
+
+    static std::pair<std::shared_ptr<FrameObject>, bool> getPrevAndIsEntry(
+            const std::shared_ptr<const AbstractProcessManager>& manager,
+            const PyFrameObject& frame,
+            ssize_t frame_no);
+
     // Data members
     const std::shared_ptr<const AbstractProcessManager> d_manager{};
     remote_addr_t d_addr{};
     ssize_t d_frame_no{};
-    remote_addr_t d_prev_addr{};
     std::shared_ptr<FrameObject> d_prev{nullptr};
-    FrameObject* d_next{nullptr};
     std::shared_ptr<CodeObject> d_code{nullptr};
     std::unordered_map<std::string, std::string> d_arguments{};
     std::unordered_map<std::string, std::string> d_locals{};
     bool d_is_entry;
+    bool d_is_shim;
 };
 }  // namespace pystack
